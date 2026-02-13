@@ -40,23 +40,23 @@ export default function VoiceBot() {
   const isActive = callState !== 'idle';
 
   // Initialize Ultravox session on mount
-  useEffect(() => {
+ useEffect(() => {
     sessionRef.current = new UltravoxSession();
 
-    // Status change listener
+    // 1. Define handleStatusChange properly as a function
     const handleStatusChange = () => {
       const status = sessionRef.current?.status;
       console.log('Status changed:', status);
 
       switch (status) {
-        case UltravoxSessionStatus.IDLE:
+        case UltravoxSessionStatus.DISCONNECTED:
           updateState('idle', 'Click the microphone to start');
           cleanup();
           break;
         case UltravoxSessionStatus.CONNECTING:
           updateState('connecting', 'Connecting to voice assistant...');
           break;
-        case UltravoxSessionStatus.IDLE_READY:
+        case UltravoxSessionStatus.IDLE: 
           updateState('listening', 'Ready! Start speaking...');
           break;
         case UltravoxSessionStatus.LISTENING:
@@ -71,19 +71,18 @@ export default function VoiceBot() {
       }
     };
 
-    // Transcripts listener
+    // 2. Transcripts listener
     const handleTranscripts = () => {
       const currentTranscripts = sessionRef.current?.transcripts || [];
       setTranscripts(currentTranscripts);
 
-      // Count user exchanges
       const userCount = currentTranscripts.filter(t => t.speaker === 'user').length;
       setStats(prev => ({ ...prev, exchanges: userCount }));
 
-      // Check for information confirmation in transcripts
       checkForUserInfo(currentTranscripts);
     };
 
+    // 3. Add the listeners
     sessionRef.current.addEventListener('status', handleStatusChange);
     sessionRef.current.addEventListener('transcripts', handleTranscripts);
 
@@ -365,9 +364,9 @@ export default function VoiceBot() {
                 ${
                   isActive
                     ? 'bg-gradient-to-br from-pink-400 to-red-400 hover:from-pink-500 hover:to-red-500 animate-pulse-slow'
-                    : callState === 'connecting'
+                    : callState === 'connecting' as string
                     ? 'bg-gray-400 cursor-not-allowed opacity-60'
-                    : 'bg-gradient-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 hover:scale-110'
+                    : 'bg-linear-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 hover:scale-110'
                 }
                 disabled:hover:scale-100
                 relative

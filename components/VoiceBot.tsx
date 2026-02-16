@@ -314,14 +314,12 @@ export default function VoiceBot() {
           {/* Header */}
           <div className="text-center mb-10">
             <h1 className="text-4xl font-bold text-gray-800 mb-3">
-              🎙️ HVAC Voice Assistant
+              🎙️ Transmonk Voice Assistant
             </h1>
             <p className="text-gray-600 text-lg">
               Ask me anything about HVAC systems
             </p>
-            <span className="inline-block mt-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-4 py-1 rounded-full text-sm font-semibold">
-              Powered by Ultravox AI
-            </span>
+           
           </div>
 
           {/* Error Banner */}

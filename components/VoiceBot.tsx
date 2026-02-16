@@ -40,7 +40,7 @@ export default function VoiceBot() {
   const isActive = callState !== 'idle';
 
   // Initialize Ultravox session on mount
- useEffect(() => {
+  useEffect(() => {
     sessionRef.current = new UltravoxSession();
 
     // 1. Define handleStatusChange properly as a function
@@ -78,8 +78,6 @@ export default function VoiceBot() {
 
       const userCount = currentTranscripts.filter(t => t.speaker === 'user').length;
       setStats(prev => ({ ...prev, exchanges: userCount }));
-
-      checkForUserInfo(currentTranscripts);
     };
 
     // 3. Add the listeners
@@ -98,39 +96,27 @@ export default function VoiceBot() {
     };
   }, []);
 
-  // Check transcripts for user information
-  const checkForUserInfo = (transcripts: Transcript[]) => {
-    // Look for the last assistant message that might contain user info
-    const lastAssistantMessages = transcripts
-      .filter(t => t.speaker === 'agent')
-      .slice(-3); // Check last 3 agent messages
-
-    for (const message of lastAssistantMessages) {
-      const text = message.text.toLowerCase();
-      
-      // Check if bot is confirming information
-      if (
-        (text.includes('confirm') || text.includes('correct')) &&
-        (text.includes('name') || text.includes('email') || text.includes('phone'))
-      ) {
-        // Try to extract user information from conversation
-        extractUserInfo(transcripts);
-        break;
-      }
-    }
-  };
-
   // Extract user information from conversation
   const extractUserInfo = (transcripts: Transcript[]) => {
-    const conversationText = transcripts
-      .map(t => `${t.speaker}: ${t.text}`)
-      .join('\n');
+    const userMessages = transcripts
+      .filter(t => t.speaker === 'user')
+      .map(t => t.text)
+      .join(' ');
 
-    // Simple extraction patterns (you can enhance this)
-    const nameMatch = conversationText.match(/(?:name is|i'm|i am)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
-    const emailMatch = conversationText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
-    const phoneMatch = conversationText.match(/(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
-    const orgMatch = conversationText.match(/(?:company|organization|work at|from)\s+([A-Z][a-zA-Z\s&]+)/i);
+    const agentMessages = transcripts
+      .filter(t => t.speaker === 'agent')
+      .map(t => t.text)
+      .join(' ');
+
+    const allText = userMessages + ' ' + agentMessages;
+
+    console.log('📝 Extracting from conversation:', allText);
+
+    // Enhanced extraction patterns
+    const nameMatch = allText.match(/(?:name is|i'm|i am|my name's|call me|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+    const emailMatch = allText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
+    const phoneMatch = allText.match(/(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+    const orgMatch = allText.match(/(?:company|organization|work at|from|with|represent)\s+([A-Z][a-zA-Z\s&.,]+?)(?:\.|,|\sand\s|$)/i);
 
     const extractedInfo: UserInfo = {
       name: nameMatch ? nameMatch[1].trim() : '',
@@ -139,11 +125,10 @@ export default function VoiceBot() {
       organization: orgMatch ? orgMatch[1].trim() : '',
     };
 
-    // Only show form if we have at least name
-    if (extractedInfo.name) {
-      setUserInfo(extractedInfo);
-      //setShowFormModal(true);
-    }
+    console.log('✅ Extracted info:', extractedInfo);
+    
+    // Update the form state with extracted values
+    setUserInfo(extractedInfo);
   };
 
   const updateState = (state: CallState, message: string) => {
@@ -170,7 +155,15 @@ export default function VoiceBot() {
 
   const handleToggleCall = async () => {
     if (isActive) {
+      // Extract information from conversation before ending
+      if (transcripts.length > 0) {
+        extractUserInfo(transcripts);
+      }
+      
+      // End the call
       await endCall();
+      
+      // Show the form modal
       setShowFormModal(true);
     } else {
       await startCall();
@@ -223,11 +216,19 @@ export default function VoiceBot() {
     setCallDuration(0);
     setTranscripts([]);
     setStats({ exchanges: 0, ragQueries: 0 });
+    // DON'T reset userInfo here - we need it for the form modal
   };
 
   // Handle form input changes
   const handleInputChange = (field: keyof UserInfo, value: string) => {
     setUserInfo(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Handle form cancellation
+  const handleFormCancel = () => {
+    setShowFormModal(false);
+    setUserInfo({ name: '', phone: '', email: '', organization: '' });
+    setError(null);
   };
 
   // Handle form submission
@@ -254,7 +255,7 @@ export default function VoiceBot() {
 
       setSubmitSuccess(true);
       
-      // Close modal after 2 seconds
+      // Close modal and reset after 2 seconds
       setTimeout(() => {
         setShowFormModal(false);
         setSubmitSuccess(false);
@@ -319,7 +320,6 @@ export default function VoiceBot() {
             <p className="text-gray-600 text-lg">
               Ask me anything about HVAC systems
             </p>
-           
           </div>
 
           {/* Error Banner */}
@@ -364,7 +364,7 @@ export default function VoiceBot() {
                     ? 'bg-gradient-to-br from-pink-400 to-red-400 hover:from-pink-500 hover:to-red-500 animate-pulse-slow'
                     : callState === 'connecting' as string
                     ? 'bg-gray-400 cursor-not-allowed opacity-60'
-                    : 'bg-linear-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 hover:scale-110'
+                    : 'bg-gradient-to-br from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 hover:scale-110'
                 }
                 disabled:hover:scale-100
                 relative
@@ -496,7 +496,7 @@ export default function VoiceBot() {
                     </label>
                     <input
                       type="text"
-                      value={userInfo.name}
+                     // value={userInfo.name}
                       onChange={(e) => handleInputChange('name', e.target.value)}
                       className="w-full text-gray-600 px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none transition"
                       placeholder="John Doe"
@@ -541,7 +541,7 @@ export default function VoiceBot() {
                     </label>
                     <input
                       type="text"
-                      value={userInfo.organization}
+                     // value={userInfo.organization}
                       onChange={(e) => handleInputChange('organization', e.target.value)}
                       className="w-full text-gray-600 px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none transition"
                       placeholder="Company Name"
@@ -553,7 +553,7 @@ export default function VoiceBot() {
                 {/* Buttons */}
                 <div className="flex gap-3 mt-8">
                   <button
-                    onClick={() => setShowFormModal(false)}
+                    onClick={handleFormCancel}
                     className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-semibold"
                     disabled={isSubmitting}
                   >
@@ -591,7 +591,6 @@ export default function VoiceBot() {
     </>
   );
 }
-
 
 
 

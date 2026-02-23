@@ -1,11 +1,10 @@
-
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
 
 // Create reusable transporter
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: process.env.EMAIL_SECURE === 'true', // true for 465, false for other ports
+  port: parseInt(process.env.EMAIL_PORT || "587"),
+  secure: process.env.EMAIL_SECURE === "true", // true for 465, false for other ports
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -16,10 +15,10 @@ const transporter = nodemailer.createTransport({
 export async function verifyEmailConfig() {
   try {
     await transporter.verify();
-    console.log('✅ Email server is ready to send messages');
+    console.log("✅ Email server is ready to send messages");
     return true;
   } catch (error) {
-    console.error('❌ Email server verification failed:', error);
+    console.error("❌ Email server verification failed:", error);
     return false;
   }
 }
@@ -255,7 +254,7 @@ Address: ${process.env.COMPANY_ADDRESS}
     html: htmlContent,
   });
 
-  console.log('✅ Email sent:', info.messageId);
+  console.log("✅ Email sent:", info.messageId);
   return info;
 }
 
@@ -282,6 +281,6 @@ Action Required: Follow up within 24 hours.
     text: internalEmail,
   });
 
-  console.log('✅ Internal notification sent:', info.messageId);
+  console.log("✅ Internal notification sent:", info.messageId);
   return info;
 }

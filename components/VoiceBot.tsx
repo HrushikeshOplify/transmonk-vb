@@ -12,9 +12,14 @@ interface UserInfo {
   organization: string;
 }
 
+const AUDIO_SOURCES = ['/shubh_tts_audio_second.mp3', '/shubh_tts_audio_second.mp3', '/shubh_tts_audio_second.mp3'];
+const GAP_SECONDS = 10; // silence between tracks
+
 export default function VoiceBot() {
   const [callState, setCallState] = useState<CallState>('idle');
-  const [statusMessage, setStatusMessage] = useState('Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you\'d like the team to follow up.');
+  const [statusMessage, setStatusMessage] = useState(
+    "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up."
+  );
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [callDuration, setCallDuration] = useState(0);
@@ -31,18 +36,108 @@ export default function VoiceBot() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
-  const sessionRef = useRef<UltravoxSession | null>(null);
-  const startTimeRef = useRef<number | null>(null);
-  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const animationRef = useRef<number | null>(null);
-  const wavePhaseRef = useRef(0);
+  // ── Voice call refs ────────────────────────────────────────────────────────
+  const sessionRef          = useRef<UltravoxSession | null>(null);
+  const startTimeRef        = useRef<number | null>(null);
+  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const canvasRef           = useRef<HTMLCanvasElement | null>(null);
+  const animationRef        = useRef<number | null>(null);
 
-  const isActive = callState !== 'idle';
-  // Animation only runs when AI is speaking
+  // ── Audio: 3 individual refs (hooks must NOT be inside arrays) ─────────────
+  const audio0 = useRef<HTMLAudioElement | null>(null);
+  const audio1 = useRef<HTMLAudioElement | null>(null);
+  const audio2 = useRef<HTMLAudioElement | null>(null);
+  const audioRefs = [audio0, audio1, audio2];
+
+  const audioActiveRef  = useRef<boolean>(false);
+  const gapTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gapIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const endedHandlerRef = useRef<(() => void) | null>(null); // tracks current 'ended' listener
+
+  // ── Audio helpers ──────────────────────────────────────────────────────────
+
+  const clearAudioTimers = () => {
+    if (gapTimerRef.current)    { clearTimeout(gapTimerRef.current);    gapTimerRef.current    = null; }
+    if (gapIntervalRef.current) { clearInterval(gapIntervalRef.current); gapIntervalRef.current = null; }
+  };
+
+  const stopAllTracks = () => {
+    audioRefs.forEach(r => {
+      const el = r.current;
+      if (!el) return;
+      // Remove any lingering 'ended' listener before pausing
+      if (endedHandlerRef.current) el.removeEventListener('ended', endedHandlerRef.current);
+      el.pause();
+      el.currentTime = 0;
+    });
+    endedHandlerRef.current = null;
+  };
+
+  /**
+   * Wait GAP_SECONDS in silence, then call onDone.
+   * Uses setTimeout for the actual delay and setInterval only for UI countdown
+   * (VoiceBot has no visible countdown — the interval is kept for parity
+   *  with AudioLoopTest and does no harm when unused in UI).
+   */
+  const runGap = (onDone: () => void) => {
+    clearAudioTimers();
+
+    // Tick every second (harmless if no UI consumes it)
+    gapIntervalRef.current = setInterval(() => {}, 1000);
+
+    gapTimerRef.current = setTimeout(() => {
+      clearAudioTimers();
+      onDone();
+    }, GAP_SECONDS * 1000);
+  };
+
+  /**
+   * Play track at `idx` fully to its natural end,
+   * then wait GAP_SECONDS, then play the next track — forever.
+   */
+  const playTrackAt = (idx: number) => {
+    if (!audioActiveRef.current) return;
+
+    stopAllTracks();
+
+    const audio = audioRefs[idx].current;
+    if (!audio) return;
+
+    const handleEnded = () => {
+      if (!audioActiveRef.current) return;
+      const nextIdx = (idx + 1) % AUDIO_SOURCES.length;
+      runGap(() => playTrackAt(nextIdx));
+    };
+
+    endedHandlerRef.current = handleEnded;
+    audio.addEventListener('ended', handleEnded, { once: true });
+    audio.play().catch(err => console.warn('Audio autoplay blocked:', err));
+  };
+
+  /** Start loop from track 0. Safe to call multiple times. */
+  const playAudioLoop = () => {
+    audioActiveRef.current = true;
+    clearAudioTimers();
+    playTrackAt(0);
+  };
+
+  /** Stop everything immediately. */
+  const stopAudioLoop = () => {
+    audioActiveRef.current = false;
+    clearAudioTimers();
+    stopAllTracks();
+  };
+
+  // Start audio loop on mount; stop on unmount
+  useEffect(() => {
+    playAudioLoop();
+    return () => stopAudioLoop();
+  }, []);
+
+  // ── Canvas wave animation ──────────────────────────────────────────────────
+  const isActive     = callState !== 'idle';
   const isAISpeaking = callState === 'speaking';
 
-  // Canvas wave animation (Siri-like) - only animates when AI is speaking
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -50,7 +145,7 @@ export default function VoiceBot() {
     if (!ctx) return;
 
     const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+      canvas.width  = canvas.offsetWidth  * window.devicePixelRatio;
       canvas.height = canvas.offsetHeight * window.devicePixelRatio;
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     };
@@ -68,76 +163,58 @@ export default function VoiceBot() {
       { color: '#a5f3fc', alpha: 0.35, speed: 0.012, amplitude: 0.18, freq: 1.8, phase: 3.1 },
     ];
 
-    let lastTime = 0;
-
     const draw = (timestamp: number) => {
-      const delta = timestamp - lastTime;
-      lastTime = timestamp;
       const w = W();
       const h = H();
-
       ctx.clearRect(0, 0, w, h);
-
       const centerY = h / 2;
 
-      // When AI is speaking, animate with full energy
-      // When idle/listening/connecting, draw a flat thin line
-      const energyTarget = isAISpeaking ? 1 : 0;
-
       waves.forEach((wave, i) => {
-        if (isAISpeaking) {
-          wave.phase += wave.speed;
-        }
-
+        if (isAISpeaking) wave.phase += wave.speed;
         ctx.beginPath();
-
         const amplitude = isAISpeaking
           ? centerY * wave.amplitude * (0.8 + 0.2 * Math.sin(wave.phase * 0.7 + i))
           : 0;
 
-       
-        
-
         for (let x = 0; x <= w; x += 2) {
-          const t = (x / w) * Math.PI * 2 * wave.freq + wave.phase;
-          const envelope = Math.sin((x / w) * Math.PI); // fade in/out at edges
-          const y = centerY + Math.sin(t) * amplitude * envelope;
-
+          const t        = (x / w) * Math.PI * 2 * wave.freq + wave.phase;
+          const envelope = Math.sin((x / w) * Math.PI);
+          const y        = centerY + Math.sin(t) * amplitude * envelope;
           if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+          else         ctx.lineTo(x, y);
         }
 
         const gradient = ctx.createLinearGradient(0, 0, w, 0);
-        gradient.addColorStop(0, 'transparent');
+        gradient.addColorStop(0,    'transparent');
         gradient.addColorStop(0.15, wave.color);
-        gradient.addColorStop(0.5, wave.color);
+        gradient.addColorStop(0.5,  wave.color);
         gradient.addColorStop(0.85, wave.color);
-        gradient.addColorStop(1, 'transparent');
+        gradient.addColorStop(1,    'transparent');
 
         ctx.strokeStyle = gradient;
         ctx.globalAlpha = isAISpeaking ? wave.alpha : 0;
-        ctx.lineWidth = 2.5;
-        ctx.shadowBlur = isAISpeaking ? 18: 0;
+        ctx.lineWidth   = 2.5;
+        ctx.shadowBlur  = isAISpeaking ? 18 : 0;
         ctx.shadowColor = wave.color;
         ctx.stroke();
         ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur  = 0;
       });
 
-      // Always draw the flat baseline
+      // Baseline
       ctx.beginPath();
       ctx.moveTo(0, centerY);
-      ctx.lineTo(w, centerY);
-      const baseGrad = ctx.createLinearGradient(0, 0, w, 0);
-      baseGrad.addColorStop(0, 'transparent');
+      ctx.lineTo(W(), centerY);
+      const baseGrad = ctx.createLinearGradient(0, 0, W(), 0);
+      baseGrad.addColorStop(0,   'transparent');
       baseGrad.addColorStop(0.1, 'rgba(255,255,255,0.15)');
       baseGrad.addColorStop(0.5, 'rgba(255,255,255,0.4)');
       baseGrad.addColorStop(0.9, 'rgba(255,255,255,0.15)');
-      baseGrad.addColorStop(1, 'transparent');
+      baseGrad.addColorStop(1,   'transparent');
       ctx.strokeStyle = baseGrad;
       ctx.globalAlpha = 1;
-      ctx.lineWidth = 1;
-      ctx.shadowBlur = 0;
+      ctx.lineWidth   = 1;
+      ctx.shadowBlur  = 0;
       ctx.stroke();
 
       animationRef.current = requestAnimationFrame(draw);
@@ -151,7 +228,7 @@ export default function VoiceBot() {
     };
   }, [isAISpeaking]);
 
-  // Ultravox session
+  // ── Ultravox session ───────────────────────────────────────────────────────
   useEffect(() => {
     sessionRef.current = new UltravoxSession();
 
@@ -159,46 +236,34 @@ export default function VoiceBot() {
       const status = sessionRef.current?.status;
       switch (status) {
         case UltravoxSessionStatus.DISCONNECTED:
-          updateState('idle', 'Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you\'d like the team to follow up.');
+          updateState(
+            'idle',
+            "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up."
+          );
           cleanup();
           break;
-        case UltravoxSessionStatus.CONNECTING:
-          updateState('connecting', 'Connecting...');
-          break;
-        case UltravoxSessionStatus.IDLE:
-          updateState('listening', 'Ready! Start speaking...');
-          break;
-        case UltravoxSessionStatus.LISTENING:
-          updateState('listening', 'Listening...');
-          break;
-        case UltravoxSessionStatus.THINKING:
-          updateState('processing', 'Thinking...');
-          break;
-        case UltravoxSessionStatus.SPEAKING:
-          updateState('speaking', '');
-          break;
+        case UltravoxSessionStatus.CONNECTING: updateState('connecting', 'Connecting...');         break;
+        case UltravoxSessionStatus.IDLE:       updateState('listening',  'Ready! Start speaking...'); break;
+        case UltravoxSessionStatus.LISTENING:  updateState('listening',  'Listening...');          break;
+        case UltravoxSessionStatus.THINKING:   updateState('processing', 'Thinking...');           break;
+        case UltravoxSessionStatus.SPEAKING:   updateState('speaking',   '');                      break;
       }
     };
 
     const handleTranscripts = () => {
-      const currentTranscripts = sessionRef.current?.transcripts || [];
-      setTranscripts(currentTranscripts);
-      const userCount = currentTranscripts.filter(t => t.speaker === 'user').length;
-      setStats(prev => ({ ...prev, exchanges: userCount }));
-
-      // Show latest agent message in the status area when speaking
-      const lastAgent = [...currentTranscripts].reverse().find(t => t.speaker === 'agent');
-      if (lastAgent && callState === 'speaking') {
-        setStatusMessage(lastAgent.text);
-      }
+      const current = sessionRef.current?.transcripts || [];
+      setTranscripts(current);
+      setStats(prev => ({ ...prev, exchanges: current.filter(t => t.speaker === 'user').length }));
+      const lastAgent = [...current].reverse().find(t => t.speaker === 'agent');
+      if (lastAgent && callState === 'speaking') setStatusMessage(lastAgent.text);
     };
 
-    sessionRef.current.addEventListener('status', handleStatusChange);
+    sessionRef.current.addEventListener('status',      handleStatusChange);
     sessionRef.current.addEventListener('transcripts', handleTranscripts);
 
     return () => {
       if (sessionRef.current) {
-        sessionRef.current.removeEventListener('status', handleStatusChange);
+        sessionRef.current.removeEventListener('status',      handleStatusChange);
         sessionRef.current.removeEventListener('transcripts', handleTranscripts);
         sessionRef.current.leaveCall();
       }
@@ -206,21 +271,19 @@ export default function VoiceBot() {
     };
   }, []);
 
-  const extractUserInfo = (transcripts: Transcript[]) => {
-    const userMessages = transcripts.filter(t => t.speaker === 'user').map(t => t.text).join(' ');
-    const agentMessages = transcripts.filter(t => t.speaker === 'agent').map(t => t.text).join(' ');
-    const allText = userMessages + ' ' + agentMessages;
+  // ── Utility functions ──────────────────────────────────────────────────────
 
-    const nameMatch = allText.match(/(?:name is|i'm|i am|my name's|call me|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+  const extractUserInfo = (ts: Transcript[]) => {
+    const allText = ts.map(t => t.text).join(' ');
+    const nameMatch  = allText.match(/(?:name is|i'm|i am|my name's|call me|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
     const emailMatch = allText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
     const phoneMatch = allText.match(/(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
-    const orgMatch = allText.match(/(?:company|organization|work at|from|with|represent)\s+([A-Z][a-zA-Z\s&.,]+?)(?:\.|,|\sand\s|$)/i);
-
+    const orgMatch   = allText.match(/(?:company|organization|work at|from|with|represent)\s+([A-Z][a-zA-Z\s&.,]+?)(?:\.|,|\sand\s|$)/i);
     setUserInfo({
-      name: nameMatch ? nameMatch[1].trim() : '',
-      email: emailMatch ? emailMatch[1].trim() : '',
-      phone: phoneMatch ? phoneMatch[0].trim() : '',
-      organization: orgMatch ? orgMatch[1].trim() : '',
+      name:         nameMatch  ? nameMatch[1].trim()  : '',
+      email:        emailMatch ? emailMatch[1].trim()  : '',
+      phone:        phoneMatch ? phoneMatch[0].trim()  : '',
+      organization: orgMatch   ? orgMatch[1].trim()    : '',
     });
   };
 
@@ -232,25 +295,31 @@ export default function VoiceBot() {
   const startDurationTimer = () => {
     startTimeRef.current = Date.now();
     durationIntervalRef.current = setInterval(() => {
-      if (startTimeRef.current) {
-        setCallDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
-      }
+      if (startTimeRef.current) setCallDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
     }, 1000);
   };
 
   const stopDurationTimer = () => {
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current);
-      durationIntervalRef.current = null;
-    }
+    if (durationIntervalRef.current) { clearInterval(durationIntervalRef.current); durationIntervalRef.current = null; }
   };
+
+  const cleanup = () => {
+    stopDurationTimer();
+    setCallDuration(0);
+    setTranscripts([]);
+    setStats({ exchanges: 0, ragQueries: 0 });
+  };
+
+  // ── Call controls ──────────────────────────────────────────────────────────
 
   const handleToggleCall = async () => {
     if (isActive) {
       if (transcripts.length > 0) extractUserInfo(transcripts);
       await endCall();
       setShowFormModal(true);
+      // Audio stays OFF while form is open — restarts only on submit or cancel
     } else {
+      stopAudioLoop(); // ← stop before conversation starts
       await startCall();
     }
   };
@@ -265,8 +334,8 @@ export default function VoiceBot() {
         body: JSON.stringify({}),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create call');
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to create call');
       }
       const data = await response.json();
       if (sessionRef.current) {
@@ -275,7 +344,8 @@ export default function VoiceBot() {
       }
     } catch (err: any) {
       setError(err.message);
-      updateState('idle', 'Have a casual conversation with a voice agent powered by Ultravox.');
+      updateState('idle', "Have a casual conversation with a voice agent powered by Ultravox.");
+      playAudioLoop(); // ← restart loop if connection failed
     }
   };
 
@@ -284,21 +354,16 @@ export default function VoiceBot() {
     cleanup();
   };
 
-  const cleanup = () => {
-    stopDurationTimer();
-    setCallDuration(0);
-    setTranscripts([]);
-    setStats({ exchanges: 0, ragQueries: 0 });
-  };
+  // ── Form handlers ──────────────────────────────────────────────────────────
 
-  const handleInputChange = (field: keyof UserInfo, value: string) => {
+  const handleInputChange = (field: keyof UserInfo, value: string) =>
     setUserInfo(prev => ({ ...prev, [field]: value }));
-  };
 
   const handleFormCancel = () => {
     setShowFormModal(false);
     setUserInfo({ name: '', phone: '', email: '', organization: '' });
     setError(null);
+    playAudioLoop(); // ← restart: user cancelled, back to idle
   };
 
   const handleFormSubmit = async () => {
@@ -311,14 +376,15 @@ export default function VoiceBot() {
         body: JSON.stringify(userInfo),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to send confirmation');
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to send confirmation');
       }
       setSubmitSuccess(true);
       setTimeout(() => {
         setShowFormModal(false);
         setSubmitSuccess(false);
         setUserInfo({ name: '', phone: '', email: '', organization: '' });
+        playAudioLoop(); // ← restart: form submitted successfully
       }, 2000);
     } catch (err: any) {
       setError(err.message);
@@ -333,26 +399,28 @@ export default function VoiceBot() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const toggleMute = () => {
-    setIsMuted(prev => !prev);
-    // sessionRef.current?.setMicrophoneMuted(!isMuted); // uncomment if SDK supports it
-  };
+  const toggleMute = () => setIsMuted(prev => !prev);
 
-  // Get the latest agent message for display
   const latestAgentMessage = [...transcripts].reverse().find(t => t.speaker === 'agent')?.text || '';
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
+      {/* Hidden audio elements — 3-file sequential loop */}
+      <audio ref={audio0} src={AUDIO_SOURCES[0]} preload="auto" />
+      <audio ref={audio1} src={AUDIO_SOURCES[1]} preload="auto" />
+      <audio ref={audio2} src={AUDIO_SOURCES[2]} preload="auto" />
+
       {/* Full-screen dark background */}
-      <div className="relative  min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black  ">
+      <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black">
 
+        <div className='text-center'>
+          <h1 className='text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold'>
+            Transmonk Voice Assistant
+          </h1>
+        </div>
 
-      <div className='text-center'>
-        <h1 className='text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold'>Transmonk Voice Assistant</h1>
-      </div>
-        
-
-        {/* Subtle dark grid texture overlay */}
+        {/* Grid texture */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -361,23 +429,23 @@ export default function VoiceBot() {
           }}
         />
 
-        {/* Top subtle glow */}
+        {/* Top glow */}
         <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 pointer-events-none "
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 pointer-events-none"
           style={{
             background: 'linear-gradient(90deg, transparent, rgba(200,200,255,0.15), transparent)',
             filter: 'blur(8px)',
           }}
         />
 
-        {/* Error */}
+        {/* Error banner */}
         {error && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 bg-red-900/80 border border-red-500/40 rounded-xl px-6 py-3 text-red-200 text-sm backdrop-blur-md">
             ⚠️ {error}
           </div>
         )}
 
-        {/* Duration badge - top right */}
+        {/* Duration badge */}
         {isActive && (
           <div className="absolute top-6 right-8 text-xs text-white/40 font-mono tracking-widest">
             {formatDuration(callDuration)}
@@ -385,72 +453,54 @@ export default function VoiceBot() {
         )}
 
         {/* Main content */}
-        <div className="relative flex flex-col items-center w-full px-5 sm:px-8  " style={{ maxWidth: 900 }} >
+        <div className="relative flex flex-col items-center w-full px-5 sm:px-8" style={{ maxWidth: 900 }}>
 
-          {/* Waveform canvas - the Siri animation */}
-          <div className="w-full relative   " style={{ height: 220 }}>
-            <canvas
-              ref={canvasRef}
-              className="w-full h-full "
-              style={{ display: 'block' }}
-            />
+          {/* Waveform canvas */}
+          <div className="w-full relative" style={{ height: 220 }}>
+            <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />
 
-            {/* Overlay text - shown when AI is speaking */}
             {isAISpeaking && latestAgentMessage && (
               <div
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center text-white/80 text-base font-light w-full  pointer-events-none "
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center text-white/80 text-base font-light w-full pointer-events-none"
                 style={{
-                  
                   textShadow: '0 0 20px rgba(200,200,255,0.3)',
                   fontFamily: "'SF Pro Display', -apple-system, sans-serif",
                   letterSpacing: '0.01em',
                 }}
               >
-                {latestAgentMessage }
+                {latestAgentMessage}
               </div>
             )}
           </div>
 
-          {/* Status / description text */}
-          <div
-            className="text-center mt-2 mb-12 px-4 "
-            style={{
-              maxWidth: 600,
-              minHeight: 48,
-            }}
-          >
+          {/* Status text */}
+          <div className="text-center mt-2 mb-12 px-4" style={{ maxWidth: 600, minHeight: 48 }}>
             {!isAISpeaking && (
               <p
                 className="text-white/50 text-sm leading-relaxed"
-                style={{
-                  fontFamily: "'SF Pro Text', -apple-system, sans-serif",
-                  letterSpacing: '0.01em',
-                }}
+                style={{ fontFamily: "'SF Pro Text', -apple-system, sans-serif", letterSpacing: '0.01em' }}
               >
-                {callState === 'listening' && 'Listening...'}
+                {callState === 'listening'  && 'Listening...'}
                 {callState === 'processing' && 'Thinking...'}
                 {callState === 'connecting' && 'Connecting...'}
-                {callState === 'idle' && statusMessage}
+                {callState === 'idle'       && statusMessage}
               </p>
             )}
           </div>
 
-          {/* Controls row */}
-          <div className=" fixed bottom-4 flex items-end gap-12 ">
+          {/* Controls */}
+          <div className="fixed bottom-4 flex items-end gap-12">
 
-            {/* Transcript button */}
+            {/* Transcript */}
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={() => setShowTranscript(prev => !prev)}
                 className="w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200"
                 style={{
-                  background: showTranscript
-                    ? 'rgba(255,255,255,0.2)'
-                    : 'rgba(255,255,255,0.08)',
+                  background: showTranscript ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)',
                   border: '1px solid rgba(255,255,255,0.12)',
                   backdropFilter: 'blur(10px)',
                 }}
-                title="Transcript"
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -463,12 +513,12 @@ export default function VoiceBot() {
               <span className="text-white/40 text-xs tracking-wide">Transcript</span>
             </div>
 
-            {/* Main call button - Start/End */}
+            {/* Main call button */}
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={handleToggleCall}
                 disabled={callState === 'connecting'}
-                className="w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 relative"
+                className="w-30 h-30 rounded-full flex items-center justify-center transition-all duration-300 relative"
                 style={{
                   background: isActive
                     ? 'linear-gradient(135deg, #ef4444, #dc2626)'
@@ -479,31 +529,23 @@ export default function VoiceBot() {
                   opacity: callState === 'connecting' ? 0.6 : 1,
                 }}
               >
-                {/* Pulse ring when active */}
                 {isActive && (
                   <div
                     className="absolute inset-0 rounded-full animate-ping"
-                    style={{
-                      background: 'rgba(239,68,68,0.2)',
-                      animationDuration: '2s',
-                    }}
+                    style={{ background: 'rgba(239,68,68,0.2)', animationDuration: '2s' }}
                   />
                 )}
-
                 {callState === 'connecting' ? (
-                  // Spinner
                   <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                     <circle cx="12" cy="12" r="10" strokeOpacity="0.3"/>
                     <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
                   </svg>
                 ) : isActive ? (
-                  // End call icon (X / phone hangup)
                   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 9.68a2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L10.68 13.31z"/>
                     <line x1="23" y1="1" x2="1" y2="23"/>
                   </svg>
                 ) : (
-                  // Start call icon (phone)
                   <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.38 2 2 0 0 1 3.6 2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.16 6.16l.94-.94a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                   </svg>
@@ -514,21 +556,16 @@ export default function VoiceBot() {
               </span>
             </div>
 
-            {/* Mute button */}
+            {/* Mute */}
             <div className="flex flex-col items-center gap-2">
               <button
                 onClick={toggleMute}
                 className="w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200"
                 style={{
-                  background: isMuted
-                    ? 'rgba(239,68,68,0.2)'
-                    : 'rgba(255,255,255,0.08)',
-                  border: isMuted
-                    ? '1px solid rgba(239,68,68,0.4)'
-                    : '1px solid rgba(255,255,255,0.12)',
+                  background: isMuted ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.08)',
+                  border: isMuted ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(255,255,255,0.12)',
                   backdropFilter: 'blur(10px)',
                 }}
-                title="Mute"
               >
                 {isMuted ? (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -553,7 +590,7 @@ export default function VoiceBot() {
           </div>
         </div>
 
-        {/* Transcript panel - slides up from bottom */}
+        {/* Transcript panel */}
         {showTranscript && (
           <div
             className="absolute bottom-0 left-0 right-0 z-20 rounded-t-3xl overflow-hidden"
@@ -569,9 +606,7 @@ export default function VoiceBot() {
               <button
                 onClick={() => setShowTranscript(false)}
                 className="text-white/30 hover:text-white/60 transition-colors text-lg leading-none"
-              >
-                ✕
-              </button>
+              >✕</button>
             </div>
             <div className="overflow-y-auto p-6 space-y-3" style={{ maxHeight: 'calc(55vh - 60px)' }}>
               {transcripts.length === 0 ? (
@@ -583,8 +618,10 @@ export default function VoiceBot() {
                     className={`flex gap-3 ${transcript.speaker === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     {transcript.speaker === 'agent' && (
-                      <div className="w-6 h-6 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
-                        style={{ background: 'linear-gradient(135deg, #c026d3, #22d3ee)' }}>
+                      <div
+                        className="w-6 h-6 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg, #c026d3, #22d3ee)' }}
+                      >
                         <span style={{ fontSize: 10 }}>AI</span>
                       </div>
                     )}
@@ -592,11 +629,9 @@ export default function VoiceBot() {
                       className="px-4 py-2.5 rounded-2xl text-sm max-w-xs"
                       style={{
                         background: transcript.speaker === 'user'
-                          ? 'rgba(99,102,241,0.25)'
-                          : 'rgba(255,255,255,0.06)',
+                          ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)',
                         border: transcript.speaker === 'user'
-                          ? '1px solid rgba(99,102,241,0.3)'
-                          : '1px solid rgba(255,255,255,0.06)',
+                          ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(255,255,255,0.06)',
                         color: 'rgba(255,255,255,0.8)',
                         lineHeight: 1.5,
                       }}
@@ -613,8 +648,10 @@ export default function VoiceBot() {
 
       {/* Form Modal */}
       {showFormModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}
+        >
           <div
             className="w-full max-w-md rounded-3xl p-8 relative"
             style={{
@@ -632,7 +669,6 @@ export default function VoiceBot() {
               </div>
             ) : (
               <>
-                {/* Modal header */}
                 <div className="mb-8">
                   <h2 className="text-xl font-semibold text-white mb-1">Confirm Your Details</h2>
                   <p className="text-white/40 text-sm">Review and edit if needed before sending</p>
@@ -645,42 +681,44 @@ export default function VoiceBot() {
                 )}
 
                 <div className="space-y-4">
-                  {[
-                    { label: 'Full Name', field: 'name' as keyof UserInfo, type: 'text', placeholder: 'John Doe' },
-                    { label: 'Email Address', field: 'email' as keyof UserInfo, type: 'email', placeholder: 'john@example.com' },
-                    { label: 'Phone Number', field: 'phone' as keyof UserInfo, type: 'tel', placeholder: '+1 (555) 123-4567' },
-                    { label: 'Organization', field: 'organization' as keyof UserInfo, type: 'text', placeholder: 'Company Name' },
-                  ].map(({ label, field, type, placeholder }) => (
-                    <div key={field}>
-                      <label
-                        className="block text-xs font-medium mb-2 tracking-wider uppercase"
-                        style={{ color: 'rgba(255,255,255,0.35)' }}
-                      >
-                        {label}
-                      </label>
-                      <input
-                        type={type}
-                        value={userInfo[field]}
-                        onChange={(e) => handleInputChange(field, e.target.value)}
-                        placeholder={placeholder}
-                        className="w-full px-4 py-3 rounded-xl text-sm transition-all outline-none"
-                        style={{
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          color: 'rgba(255,255,255,0.85)',
-                          fontFamily: 'inherit',
-                        }}
-                        onFocus={e => {
-                          e.target.style.border = '1px solid rgba(99,102,241,0.6)';
-                          e.target.style.background = 'rgba(99,102,241,0.08)';
-                        }}
-                        onBlur={e => {
-                          e.target.style.border = '1px solid rgba(255,255,255,0.1)';
-                          e.target.style.background = 'rgba(255,255,255,0.05)';
-                        }}
-                      />
-                    </div>
-                  ))}
+                  {([
+                    { label: 'Full Name',       field: 'name',         type: 'text',  placeholder: 'John Doe'            },
+                    { label: 'Email Address',   field: 'email',        type: 'email', placeholder: 'john@example.com'    },
+                    { label: 'Phone Number',    field: 'phone',        type: 'tel',   placeholder: '+1 (555) 123-4567'   },
+                    { label: 'Organization',   field: 'organization', type: 'text',  placeholder: 'Company Name'        },
+                  ] as { label: string; field: keyof UserInfo; type: string; placeholder: string }[]).map(
+                    ({ label, field, type, placeholder }) => (
+                      <div key={field}>
+                        <label
+                          className="block text-xs font-medium mb-2 tracking-wider uppercase"
+                          style={{ color: 'rgba(255,255,255,0.35)' }}
+                        >
+                          {label}
+                        </label>
+                        <input
+                          type={type}
+                          value={userInfo[field]}
+                          onChange={e => handleInputChange(field, e.target.value)}
+                          placeholder={placeholder}
+                          className="w-full px-4 py-3 rounded-xl text-sm transition-all outline-none"
+                          style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            color: 'rgba(255,255,255,0.85)',
+                            fontFamily: 'inherit',
+                          }}
+                          onFocus={e => {
+                            e.target.style.border     = '1px solid rgba(99,102,241,0.6)';
+                            e.target.style.background = 'rgba(99,102,241,0.08)';
+                          }}
+                          onBlur={e => {
+                            e.target.style.border     = '1px solid rgba(255,255,255,0.1)';
+                            e.target.style.background = 'rgba(255,255,255,0.05)';
+                          }}
+                        />
+                      </div>
+                    )
+                  )}
                 </div>
 
                 <div className="flex gap-3 mt-8">
@@ -703,8 +741,8 @@ export default function VoiceBot() {
                     style={{
                       background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                       boxShadow: '0 4px 20px rgba(99,102,241,0.4)',
-                      opacity: (isSubmitting || !userInfo.name || !userInfo.email) ? 0.5 : 1,
-                      cursor: (isSubmitting || !userInfo.name || !userInfo.email) ? 'not-allowed' : 'pointer',
+                      opacity: isSubmitting || !userInfo.name || !userInfo.email ? 0.5 : 1,
+                      cursor:  isSubmitting || !userInfo.name || !userInfo.email ? 'not-allowed' : 'pointer',
                     }}
                   >
                     {isSubmitting ? 'Sending...' : 'Confirm & Send'}

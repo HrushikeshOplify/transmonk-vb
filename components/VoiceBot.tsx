@@ -52,7 +52,7 @@ export default function VoiceBot() {
   const audioActiveRef  = useRef<boolean>(false);
   const gapTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gapIntervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const endedHandlerRef = useRef<(() => void) | null>(null); // tracks current 'ended' listener
+  const endedHandlerRef = useRef<(() => void) | null>(null);
 
   // ── Audio helpers ──────────────────────────────────────────────────────────
 
@@ -65,7 +65,6 @@ export default function VoiceBot() {
     audioRefs.forEach(r => {
       const el = r.current;
       if (!el) return;
-      // Remove any lingering 'ended' listener before pausing
       if (endedHandlerRef.current) el.removeEventListener('ended', endedHandlerRef.current);
       el.pause();
       el.currentTime = 0;
@@ -73,42 +72,25 @@ export default function VoiceBot() {
     endedHandlerRef.current = null;
   };
 
-  /**
-   * Wait GAP_SECONDS in silence, then call onDone.
-   * Uses setTimeout for the actual delay and setInterval only for UI countdown
-   * (VoiceBot has no visible countdown — the interval is kept for parity
-   *  with AudioLoopTest and does no harm when unused in UI).
-   */
   const runGap = (onDone: () => void) => {
     clearAudioTimers();
-
-    // Tick every second (harmless if no UI consumes it)
     gapIntervalRef.current = setInterval(() => {}, 1000);
-
     gapTimerRef.current = setTimeout(() => {
       clearAudioTimers();
       onDone();
     }, GAP_SECONDS * 1000);
   };
 
-  /**
-   * Play track at `idx` fully to its natural end,
-   * then wait GAP_SECONDS, then play the next track — forever.
-   */
   const playTrackAt = (idx: number) => {
     if (!audioActiveRef.current) return;
-
     stopAllTracks();
-
     const audio = audioRefs[idx].current;
     if (!audio) return;
-
     const handleEnded = () => {
       if (!audioActiveRef.current) return;
       const nextIdx = (idx + 1) % AUDIO_SOURCES.length;
       runGap(() => playTrackAt(nextIdx));
     };
-
     endedHandlerRef.current = handleEnded;
     audio.addEventListener('ended', handleEnded, { once: true });
     audio.play().catch(err => console.warn('Audio autoplay blocked:', err));
@@ -153,7 +135,6 @@ export default function VoiceBot() {
     window.addEventListener('resize', resize);
 
     const W = () => canvas.offsetWidth;
-    const H = () => canvas.offsetHeight;
 
     const waves = [
       { color: '#c026d3', alpha: 0.7, speed: 0.018, amplitude: 0.38, freq: 2.2, phase: 0 },
@@ -163,9 +144,9 @@ export default function VoiceBot() {
       { color: '#a5f3fc', alpha: 0.35, speed: 0.012, amplitude: 0.18, freq: 1.8, phase: 3.1 },
     ];
 
-    const draw = (timestamp: number) => {
+    const draw = () => {
       const w = W();
-      const h = H();
+      const h = canvas.offsetHeight;
       ctx.clearRect(0, 0, w, h);
       const centerY = h / 2;
 
@@ -241,12 +222,17 @@ export default function VoiceBot() {
             "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up."
           );
           cleanup();
+          // Restart audio only when form is also not open
+          setShowFormModal(prev => {
+            if (!prev) playAudioLoop();
+            return prev;
+          });
           break;
-        case UltravoxSessionStatus.CONNECTING: updateState('connecting', 'Connecting...');         break;
+        case UltravoxSessionStatus.CONNECTING: updateState('connecting', 'Connecting...');          break;
         case UltravoxSessionStatus.IDLE:       updateState('listening',  'Ready! Start speaking...'); break;
-        case UltravoxSessionStatus.LISTENING:  updateState('listening',  'Listening...');          break;
-        case UltravoxSessionStatus.THINKING:   updateState('processing', 'Thinking...');           break;
-        case UltravoxSessionStatus.SPEAKING:   updateState('speaking',   '');                      break;
+        case UltravoxSessionStatus.LISTENING:  updateState('listening',  'Listening...');           break;
+        case UltravoxSessionStatus.THINKING:   updateState('processing', 'Thinking...');            break;
+        case UltravoxSessionStatus.SPEAKING:   updateState('speaking',   '');                       break;
       }
     };
 
@@ -254,8 +240,9 @@ export default function VoiceBot() {
       const current = sessionRef.current?.transcripts || [];
       setTranscripts(current);
       setStats(prev => ({ ...prev, exchanges: current.filter(t => t.speaker === 'user').length }));
+      // Update subtitle (no auto-fill of form)
       const lastAgent = [...current].reverse().find(t => t.speaker === 'agent');
-      if (lastAgent && callState === 'speaking') setStatusMessage(lastAgent.text);
+      if (lastAgent) setStatusMessage(lastAgent.text);
     };
 
     sessionRef.current.addEventListener('status',      handleStatusChange);
@@ -272,20 +259,6 @@ export default function VoiceBot() {
   }, []);
 
   // ── Utility functions ──────────────────────────────────────────────────────
-
-  const extractUserInfo = (ts: Transcript[]) => {
-    const allText = ts.map(t => t.text).join(' ');
-    const nameMatch  = allText.match(/(?:name is|i'm|i am|my name's|call me|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
-    const emailMatch = allText.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/i);
-    const phoneMatch = allText.match(/(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
-    const orgMatch   = allText.match(/(?:company|organization|work at|from|with|represent)\s+([A-Z][a-zA-Z\s&.,]+?)(?:\.|,|\sand\s|$)/i);
-    setUserInfo({
-      name:         nameMatch  ? nameMatch[1].trim()  : '',
-      email:        emailMatch ? emailMatch[1].trim()  : '',
-      phone:        phoneMatch ? phoneMatch[0].trim()  : '',
-      organization: orgMatch   ? orgMatch[1].trim()    : '',
-    });
-  };
 
   const updateState = (state: CallState, message: string) => {
     setCallState(state);
@@ -314,13 +287,15 @@ export default function VoiceBot() {
 
   const handleToggleCall = async () => {
     if (isActive) {
-      if (transcripts.length > 0) extractUserInfo(transcripts);
+      // End the running call; audio stays off
       await endCall();
-      setShowFormModal(true);
-      // Audio stays OFF while form is open — restarts only on submit or cancel
     } else {
-      stopAudioLoop(); // ← stop before conversation starts
-      await startCall();
+      // 1. Stop background audio immediately
+      stopAudioLoop();
+      // 2. Open the info-collection form
+      setShowFormModal(true);
+      // 3. Start the call simultaneously in the background (non-blocking)
+      startCall();
     }
   };
 
@@ -344,8 +319,12 @@ export default function VoiceBot() {
       }
     } catch (err: any) {
       setError(err.message);
-      updateState('idle', "Have a casual conversation with a voice agent powered by Ultravox.");
-      playAudioLoop(); // ← restart loop if connection failed
+      updateState('idle', "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up.");
+      // Restart audio only if form is also not showing
+      setShowFormModal(prev => {
+        if (!prev) playAudioLoop();
+        return prev;
+      });
     }
   };
 
@@ -359,13 +338,15 @@ export default function VoiceBot() {
   const handleInputChange = (field: keyof UserInfo, value: string) =>
     setUserInfo(prev => ({ ...prev, [field]: value }));
 
+  /** Cancel: close form, restart audio only if call also ended */
   const handleFormCancel = () => {
     setShowFormModal(false);
     setUserInfo({ name: '', phone: '', email: '', organization: '' });
     setError(null);
-    playAudioLoop(); // ← restart: user cancelled, back to idle
+    if (callState === 'idle') playAudioLoop();
   };
 
+  /** Submit: POST user info, show success, then close form */
   const handleFormSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
@@ -384,7 +365,8 @@ export default function VoiceBot() {
         setShowFormModal(false);
         setSubmitSuccess(false);
         setUserInfo({ name: '', phone: '', email: '', organization: '' });
-        playAudioLoop(); // ← restart: form submitted successfully
+        // Restart audio only if call has ended by now
+        if (callState === 'idle') playAudioLoop();
       }, 2000);
     } catch (err: any) {
       setError(err.message);
@@ -415,7 +397,7 @@ export default function VoiceBot() {
       <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black">
 
         <div className='text-center'>
-          <h1 className='text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold'>
+          <h1 className='text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white'>
             Transmonk Voice Assistant
           </h1>
         </div>
@@ -438,8 +420,8 @@ export default function VoiceBot() {
           }}
         />
 
-        {/* Error banner */}
-        {error && (
+        {/* Error banner — only shown when form is NOT open */}
+        {error && !showFormModal && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10 bg-red-900/80 border border-red-500/40 rounded-xl px-6 py-3 text-red-200 text-sm backdrop-blur-md">
             ⚠️ {error}
           </div>
@@ -459,7 +441,7 @@ export default function VoiceBot() {
           <div className="w-full relative" style={{ height: 220 }}>
             <canvas ref={canvasRef} className="w-full h-full" style={{ display: 'block' }} />
 
-            {isAISpeaking && latestAgentMessage && (
+            {isAISpeaking && latestAgentMessage && !showFormModal && (
               <div
                 className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center text-white/80 text-base font-light w-full pointer-events-none"
                 style={{
@@ -475,7 +457,7 @@ export default function VoiceBot() {
 
           {/* Status text */}
           <div className="text-center mt-2 mb-12 px-4" style={{ maxWidth: 600, minHeight: 48 }}>
-            {!isAISpeaking && (
+            {!isAISpeaking && !showFormModal && (
               <p
                 className="text-white/50 text-sm leading-relaxed"
                 style={{ fontFamily: "'SF Pro Text', -apple-system, sans-serif", letterSpacing: '0.01em' }}
@@ -646,11 +628,11 @@ export default function VoiceBot() {
         )}
       </div>
 
-      {/* Form Modal */}
+      {/* ── Info Collection Form Modal ────────────────────────────────────────── */}
       {showFormModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(12px)' }}
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)' }}
         >
           <div
             className="w-full max-w-md rounded-3xl p-8 relative"
@@ -664,28 +646,39 @@ export default function VoiceBot() {
             {submitSuccess ? (
               <div className="text-center py-10">
                 <div className="text-6xl mb-5">✅</div>
-                <h3 className="text-2xl font-semibold text-white mb-2">Sent!</h3>
-                <p className="text-white/40 text-sm">Your confirmation email is on its way.</p>
+                <h3 className="text-2xl font-semibold text-white mb-2">Submitted!</h3>
+                <p className="text-white/40 text-sm">Thanks! The Transmonk team will be in touch.</p>
               </div>
             ) : (
               <>
-                <div className="mb-8">
-                  <h2 className="text-xl font-semibold text-white mb-1">Confirm Your Details</h2>
-                  <p className="text-white/40 text-sm">Review and edit if needed before sending</p>
+                {/* Header with optional live-call indicator */}
+                <div className="mb-6">
+                  {isActive && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
+                      <span className="text-green-400 text-xs font-medium tracking-wide">Call in progress</span>
+                    </div>
+                  )}
+                  <h2 className="text-xl font-semibold text-white mb-1">Leave Your Details</h2>
+                  <p className="text-white/40 text-sm">
+                    Fill in your info and the Transmonk team will follow up with you.
+                  </p>
                 </div>
 
+                {/* Error inside modal */}
                 {error && (
                   <div className="mb-5 bg-red-900/30 border border-red-500/30 rounded-xl px-4 py-3">
-                    <p className="text-red-300 text-sm">{error}</p>
+                    <p className="text-red-300 text-sm">⚠️ {error}</p>
                   </div>
                 )}
 
+                {/* Form fields — all blank, user fills manually */}
                 <div className="space-y-4">
                   {([
-                    { label: 'Full Name',       field: 'name',         type: 'text',  placeholder: 'John Doe'            },
-                    { label: 'Email Address',   field: 'email',        type: 'email', placeholder: 'john@example.com'    },
-                    { label: 'Phone Number',    field: 'phone',        type: 'tel',   placeholder: '+1 (555) 123-4567'   },
-                    { label: 'Organization',   field: 'organization', type: 'text',  placeholder: 'Company Name'        },
+                    { label: 'Full Name',     field: 'name',         type: 'text',  placeholder: 'John Doe'          },
+                    { label: 'Email Address', field: 'email',        type: 'email', placeholder: 'john@example.com'  },
+                    { label: 'Phone Number',  field: 'phone',        type: 'tel',   placeholder: '+1 (555) 123-4567' },
+                    { label: 'Organization',  field: 'organization', type: 'text',  placeholder: 'Company Name'      },
                   ] as { label: string; field: keyof UserInfo; type: string; placeholder: string }[]).map(
                     ({ label, field, type, placeholder }) => (
                       <div key={field}>
@@ -721,6 +714,7 @@ export default function VoiceBot() {
                   )}
                 </div>
 
+                {/* Action buttons */}
                 <div className="flex gap-3 mt-8">
                   <button
                     onClick={handleFormCancel}
@@ -730,6 +724,7 @@ export default function VoiceBot() {
                       background: 'rgba(255,255,255,0.06)',
                       border: '1px solid rgba(255,255,255,0.1)',
                       color: 'rgba(255,255,255,0.5)',
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     }}
                   >
                     Cancel
@@ -742,10 +737,10 @@ export default function VoiceBot() {
                       background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                       boxShadow: '0 4px 20px rgba(99,102,241,0.4)',
                       opacity: isSubmitting || !userInfo.name || !userInfo.email ? 0.5 : 1,
-                      cursor:  isSubmitting || !userInfo.name || !userInfo.email ? 'not-allowed' : 'pointer',
+                      cursor: isSubmitting || !userInfo.name || !userInfo.email ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {isSubmitting ? 'Sending...' : 'Confirm & Send'}
+                    {isSubmitting ? 'Submitting...' : 'Submit'}
                   </button>
                 </div>
               </>

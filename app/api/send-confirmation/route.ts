@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendConfirmationEmail, sendInternalNotification } from '@/lib/email';
 
+const MAKE_WEBHOOK_URL = 'https://hook.us2.make.com/4yprochn78lmf4i3v4lxgkaha5ui7l6b';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -37,8 +39,28 @@ export async function POST(request: NextRequest) {
       // Don't fail the request if internal email fails
     }
 
-    // Optional: Save to database
-    // await saveToDatabase({ name, email, phone, organization });
+    // Send data to Make webhook
+    try {
+      const webhookResponse = await fetch(MAKE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visitor_name: name,
+          phone_number: phone,
+          email_address: email,
+          organization: organization,
+        }),
+      });
+
+      if (!webhookResponse.ok) {
+        console.error('⚠️ Make webhook responded with status:', webhookResponse.status);
+      } else {
+        console.log('✅ Data sent to Make webhook successfully');
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to send data to Make webhook:', error);
+      // Don't fail the request if webhook call fails
+    }
 
     return NextResponse.json({
       success: true,

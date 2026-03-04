@@ -91,16 +91,16 @@ Address: ${process.env.COMPANY_ADDRESS}
       text-align: center;
       margin-bottom: 30px;
       padding-bottom: 20px;
-      border-bottom: 3px solid #667eea;
+      border-bottom: 3px solid #000;
     }
     .logo {
       font-size: 32px;
       font-weight: bold;
-      color: #667eea;
+      color: #000;
       margin-bottom: 10px;
     }
     h1 {
-      color: #667eea;
+      color: #000;
       font-size: 24px;
       margin-bottom: 20px;
     }
@@ -115,13 +115,13 @@ Address: ${process.env.COMPANY_ADDRESS}
     }
     .info-box {
       background-color: #f8f9fa;
-      border-left: 4px solid #667eea;
+      border-left: 4px solid #000;
       padding: 20px;
       margin: 25px 0;
       border-radius: 5px;
     }
     .info-box h2 {
-      color: #667eea;
+      color: #000;
       font-size: 18px;
       margin-top: 0;
       margin-bottom: 15px;
@@ -133,7 +133,15 @@ Address: ${process.env.COMPANY_ADDRESS}
     .info-item strong {
       color: #333;
       display: inline-block;
-      width: 140px;
+      width: 160px;
+    }
+    .highlight-box {
+      background-color: #f0f0f0;
+      border-left: 4px solid #555;
+      padding: 15px 20px;
+      margin: 20px 0;
+      border-radius: 5px;
+      color: #444;
     }
     .footer {
       margin-top: 40px;
@@ -146,7 +154,7 @@ Address: ${process.env.COMPANY_ADDRESS}
     .footer-logo {
       font-size: 20px;
       font-weight: bold;
-      color: #667eea;
+      color: #000;
       margin-bottom: 10px;
     }
     .contact-info {
@@ -161,7 +169,7 @@ Address: ${process.env.COMPANY_ADDRESS}
       color: #555;
     }
     a {
-      color: #667eea;
+      color: #000;
       text-decoration: none;
     }
     a:hover {
@@ -176,68 +184,72 @@ Address: ${process.env.COMPANY_ADDRESS}
       <p style="margin: 0; color: #777;">Advanced HVAC Solutions</p>
     </div>
 
-    <p class="greeting">Dear <strong>${name}</strong>,</p>
+    <p class="greeting">Dear <strong>Hrushikesh Nikam</strong>,</p>
 
     <div class="content">
       <p>
-        Thank you for visiting the <strong>Transmonk booth</strong> at the exhibition. 
-        It was a pleasure interacting with you and learning about your organization, 
-        <strong>${organization}</strong>.
+        It was a privilege to host you at the <strong>Transmonk booth</strong> during the recent 
+        <strong>Mumbai exhibition</strong>. We greatly value the time you spent interacting with 
+        our voice agent to explore our industrial solutions.
       </p>
 
       <p>
-        As discussed, Transmonk specializes in providing advanced and reliable solutions 
-        designed to improve efficiency, performance, and long-term operational value. 
-        We are excited about the possibility of working together and helping your 
-        organization achieve its goals.
+        At Transmonk, our philosophy is simple: delivering <strong>"Make in India" excellence</strong> 
+        that translates into measurable operational efficiency and long-term asset value for our partners. 
+        We are genuinely excited about the synergy between our capabilities and the goals of 
+        <strong>Super Industries</strong>.
+      </p>
+
+      <p>
+        To ensure your specific requirements are addressed with the technical depth they deserve, 
+        we have aligned our Regional Sales Manager to your account for direct support:
       </p>
     </div>
 
+    <div class="highlight-box">
+      <strong>Regional Manager:</strong> Hrushikesh Nikam<br>
+      <strong>Contact:</strong> +91 70835 97649 &nbsp;|&nbsp; 
+      <a href="mailto:hrnikam123@gmail.com">hrnikam123@gmail.com</a>
+    </div>
+
+    <!-- Your Shared Details Card — preserved -->
     <div class="info-box">
       <h2>Your Shared Details</h2>
       <div class="info-item">
-        <strong>Name:</strong> ${name}
+        <strong>Name:</strong> Hrushikesh Nikam
       </div>
       <div class="info-item">
-        <strong>Contact Number:</strong> ${phone}
+        <strong>Contact Number:</strong> +91 70835 97649
       </div>
       <div class="info-item">
-        <strong>Email:</strong> ${email}
+        <strong>Email:</strong> hrnikam123@gmail.com
       </div>
       <div class="info-item">
-        <strong>Organization:</strong> ${organization}
+        <strong>Organization:</strong> Super Industries
       </div>
     </div>
 
     <div class="content">
       <p>
-        Our team will review your requirements and connect with you shortly to provide 
-        relevant information, product details, or a personalized demonstration based 
-        on your needs.
+        Please rest assured that our team will personally reach out to you within the 
+        <strong>next 10 business days</strong> to continue this dialogue and define the next steps.
       </p>
 
       <p>
-        If you have any immediate questions or would like to schedule a meeting, 
-        please feel free to reply to this email.
-      </p>
-
-      <p>
-        We sincerely appreciate your time and interest in Transmonk and look forward 
-        to building a successful partnership.
+        We look forward to a valuable partnership.
       </p>
     </div>
 
     <p class="signature">
-      Warm Regards,<br>
-      <strong>Transmonk Team</strong>
+      Warm regards,<br>
+      <strong>Deepak</strong> — AI Voice Agent<br>
+      Technical Sales Team | Transmonk India Pvt. Ltd.
     </p>
 
     <div class="footer">
       <div class="footer-logo">TRANSMONK</div>
       <div class="contact-info">
-        <p><strong>Website:</strong> <a href="${process.env.COMPANY_WEBSITE}">${process.env.COMPANY_WEBSITE}</a></p>
-        <p><strong>Phone:</strong> ${process.env.COMPANY_PHONE}</p>
-        <p><strong>Address:</strong> ${process.env.COMPANY_ADDRESS}</p>
+        <p><strong>Website:</strong> <a href="https://www.transmonk.in">www.transmonk.in</a></p>
       </div>
     </div>
   </div>

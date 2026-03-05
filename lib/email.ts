@@ -184,7 +184,7 @@ Address: ${process.env.COMPANY_ADDRESS}
       <p style="margin: 0; color: #777;">Advanced HVAC Solutions</p>
     </div>
 
-    <p class="greeting">Dear <strong>Hrushikesh Nikam</strong>,</p>
+    <p class="greeting">Dear <strong>${name}</strong>,</p>
 
     <div class="content">
       <p>
@@ -197,7 +197,7 @@ Address: ${process.env.COMPANY_ADDRESS}
         At Transmonk, our philosophy is simple: delivering <strong>"Make in India" excellence</strong> 
         that translates into measurable operational efficiency and long-term asset value for our partners. 
         We are genuinely excited about the synergy between our capabilities and the goals of 
-        <strong>Super Industries</strong>.
+        <strong>${organization}</strong>.
       </p>
 
       <p>
@@ -209,23 +209,23 @@ Address: ${process.env.COMPANY_ADDRESS}
     <div class="highlight-box">
       <strong>Regional Manager:</strong> Hrushikesh Nikam<br>
       <strong>Contact:</strong> +91 70835 97649 &nbsp;|&nbsp; 
-      <a href="mailto:hrnikam123@gmail.com">hrnikam123@gmail.com</a>
+      <a href="mailto:hrushikeshn63@gmail.com">hrushikeshn63@gmail.com</a>
     </div>
 
     <!-- Your Shared Details Card — preserved -->
     <div class="info-box">
       <h2>Your Shared Details</h2>
       <div class="info-item">
-        <strong>Name:</strong> Hrushikesh Nikam
+        <strong>Name:</strong>${name}
       </div>
       <div class="info-item">
-        <strong>Contact Number:</strong> +91 70835 97649
+        <strong>Contact Number:</strong> ${phone}
       </div>
       <div class="info-item">
-        <strong>Email:</strong> hrnikam123@gmail.com
+        <strong>Email:</strong> ${email}
       </div>
       <div class="info-item">
-        <strong>Organization:</strong> Super Industries
+        <strong>Organization:</strong> ${organization}
       </div>
     </div>
 

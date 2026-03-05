@@ -360,6 +360,15 @@ export default function VoiceBot() {
         const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
         setCallDuration(elapsed);
 
+        if (
+          elapsed >= 100 &&
+          !sessionLimitSentRef.current &&
+          sessionRef.current
+        ) {
+          sessionLimitSentRef.current = true;
+          sessionRef.current.sendText("session count reaches 100");
+        }
+
         // At 300 seconds, inject system signal once
         if (
           elapsed >= 300 &&
@@ -367,7 +376,7 @@ export default function VoiceBot() {
           sessionRef.current
         ) {
           sessionLimitSentRef.current = true;
-          sessionRef.current.sendText("session count reaches 300");
+          sessionRef.current.sendText("2 minutes remaining");
         }
       }
     }, 1000);
@@ -835,7 +844,7 @@ export default function VoiceBot() {
       </div>
 
       {/* ── Info Collection Form Modal ────────────────────────────────────────── */}
-      {!showFormModal && (
+      {showFormModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{

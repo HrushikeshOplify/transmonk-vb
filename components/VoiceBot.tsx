@@ -40,6 +40,7 @@ export default function VoiceBot() {
   const [showTranscript, setShowTranscript] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
+  const [formSend, setFormSend] = useState(false)
   const [userInfo, setUserInfo] = useState<UserInfo>({
     name: "",
     phone: "",
@@ -362,6 +363,7 @@ export default function VoiceBot() {
 
         if (
           elapsed >= 100 &&
+          !formSend&&
           !sessionLimitSentRef.current &&
           sessionRef.current
         ) {
@@ -485,6 +487,7 @@ export default function VoiceBot() {
         throw new Error(err.error || "Failed to send confirmation");
       }
       setSubmitSuccess(true);
+      setFormSend(true)
       setTimeout(() => {
         setShowFormModal(false);
         setSubmitSuccess(false);

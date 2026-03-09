@@ -468,7 +468,7 @@ export default function VoiceBot() {
       <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black">
         <div className="text-center">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white">
-            Transmonk Voice Assistant
+            Transmonk AI Assistant
           </h1>
         </div>
 

@@ -43,11 +43,24 @@ export async function sendConfirmationEmail(data: EmailData) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Transmonk Follow-up</title>
+  <style>
+    @media only screen and (max-width: 600px) {
+      .outer-wrapper {
+        padding: 20px 16px !important;
+      }
+      .body-cell {
+        padding: 30px 20px !important;
+      }
+      .detail-cell {
+        padding: 16px !important;
+      }
+    }
+  </style>
 </head>
 <body style="margin:0; padding:0; background-color:#f4f7f6; font-family:Arial, Helvetica, sans-serif; -webkit-font-smoothing:antialiased;">
 
   <!-- Outer wrapper -->
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout:fixed; background-color:#f4f7f6; padding:40px 20px;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout:fixed; background-color:#f4f7f6; padding:40px 20px;" class="outer-wrapper">
     <tr>
       <td align="center">
 
@@ -64,7 +77,7 @@ export async function sendConfirmationEmail(data: EmailData) {
 
           <!-- Body content -->
           <tr>
-            <td style="padding:40px 30px; color:#333333; line-height:1.6; font-size:16px;">
+            <td class="body-cell" style="padding:40px 30px; color:#333333; line-height:1.6; font-size:16px;">
 
               <p style="margin-top:0;">Dear <strong>${name}</strong>,</p>
 
@@ -98,7 +111,7 @@ export async function sendConfirmationEmail(data: EmailData) {
               <!-- Shared Details Info Box -->
               <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#f8f9fa; border-left:4px solid #000; margin-top:25px; border-radius:5px;">
                 <tr>
-                  <td style="padding:20px 20px 20px 20px;">
+                  <td class="detail-cell" style="padding:20px;">
                     <table border="0" cellpadding="0" cellspacing="0" width="100%">
                       <tr>
                         <td style="font-size:18px; font-weight:bold; color:#000; padding-bottom:15px;">

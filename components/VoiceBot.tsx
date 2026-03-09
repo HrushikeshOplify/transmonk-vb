@@ -270,9 +270,14 @@ export default function VoiceBot() {
       setCallDuration(elapsed);
 
       // Fix #2 & #3: Independent flags, read formSend from ref (not stale closure)
-      if (elapsed >= 100 && !formSendRef.current && !limit100SentRef.current && sessionRef.current) {
+      // if (elapsed >= 100 && !formSendRef.current && !limit100SentRef.current && sessionRef.current) {
+      //   limit100SentRef.current = true;
+      //   sessionRef.current.sendText("session count reaches 100");
+      // }
+
+       if (elapsed >= 60 && !formSendRef.current && !limit100SentRef.current && sessionRef.current) {
         limit100SentRef.current = true;
-        sessionRef.current.sendText("session count reaches 100");
+        sessionRef.current.sendText("session count reaches 60");
       }
 
       // Fix #2: This now fires independently regardless of whether 100s fired
@@ -306,7 +311,10 @@ export default function VoiceBot() {
       await endCall();
     } else {
       if (!canStartCall()) return; // Fix #8: rate limit
-      setShowFormModal(true);
+      // setShowFormModal(true);
+      setTimeout(() => {
+        setShowFormModal(true);
+      }, 60*1000);
       await startCall(); // Fix #14: now properly awaited
     }
   };

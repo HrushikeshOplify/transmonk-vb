@@ -175,6 +175,7 @@ Address: ${process.env.COMPANY_ADDRESS}
     a:hover {
       text-decoration: underline;
     }
+    
   </style>
 </head>
 <body>
@@ -207,7 +208,7 @@ Address: ${process.env.COMPANY_ADDRESS}
     </div>
 
     <div class="highlight-box">
-      <strong>Regional Manager:</strong> Hrushikesh Nikam<br>
+      <strong>Regional Manager:</strong> Suraj Prajapati<br>
       <strong>Contact:</strong> +91 70835 97649 &nbsp;|&nbsp; 
       <a href="mailto:hrushikeshn63@gmail.com">hrushikeshn63@gmail.com</a>
     </div>

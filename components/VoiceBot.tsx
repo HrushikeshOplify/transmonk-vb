@@ -47,7 +47,7 @@ const useRateLimiter = (limitMs: number) => {
 export default function VoiceBot() {
   const [callState, setCallState] = useState<CallState>("idle");
   const [statusMessage, setStatusMessage] = useState(
-    "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up.",
+    "Have a conversation with a Transmonk voice agent. Ask anything about EC fan, and leave your info if you'd like the team to follow up.",
   );
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   // Fix #9: Separate internal error from user-facing error to avoid leaking internals
@@ -206,7 +206,7 @@ export default function VoiceBot() {
         case UltravoxSessionStatus.DISCONNECTED:
           updateState(
             "idle",
-            "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up.",
+            "Have a conversation with a Transmonk voice agent. Ask anything about EC fan, and leave your info if you'd like the team to follow up.",
           );
           cleanup();
           break;
@@ -342,7 +342,7 @@ export default function VoiceBot() {
       setError(err.message || "Something went wrong. Please try again.");
       updateState(
         "idle",
-        "Have a conversation with a Transmonk voice agent. Ask anything about HVAC systems, and leave your info if you'd like the team to follow up.",
+        "Have a conversation with a Transmonk voice agent. Ask anything about EC fan, and leave your info if you'd like the team to follow up.",
       );
     }
   };

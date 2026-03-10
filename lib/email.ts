@@ -34,7 +34,7 @@ export async function sendConfirmationEmail(data: EmailData) {
   const { name, email, phone, organization } = data;
 
   // Email subject
-  const subject = `ACREX 2026: Next Steps with Transmonk HVAC Solutions`;
+  const subject = `ACREX 2026: Next Steps with Transmonk EC fan Solutions`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -83,7 +83,7 @@ export async function sendConfirmationEmail(data: EmailData) {
 
               <p>Thank you for visiting the Transmonk booth at ACREX 2026. It was a pleasure to connect with you, and we appreciate you taking the time to interact with our voice agent, Riya, to share your details.</p>
 
-              <p>At Transmonk, we believe in being <em>"Simply Precise."</em> Our team is currently reviewing the information you provided regarding your interest in our HVAC and energy-efficient fan solutions. To ensure we deliver the most optimized guidance for your application, one of our techno-commercial engineers will follow up with you within the next seven business days to discuss your specific requirements and share personalized recommendations.</p>
+              <p>At Transmonk, we believe in being <em>"Simply Precise."</em> Our team is currently reviewing the information you provided regarding your interest in our EC fan and energy-efficient fan solutions. To ensure we deliver the most optimized guidance for your application, one of our techno-commercial engineers will follow up with you within the next seven business days to discuss your specific requirements and share personalized recommendations.</p>
 
               <p>While our team prepares your customized solution, we invite you to explore our engineering capabilities, case studies, and EC motor technology by visiting our website.</p>
 

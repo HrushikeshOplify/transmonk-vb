@@ -34,7 +34,7 @@ export async function sendConfirmationEmail(data: EmailData) {
   const { name, email, phone, organization } = data;
 
   // Email subject
-  const subject = `Strategic Alignment: Transmonk & ${organization} | Mumbai Exhibition Follow-up`;
+  const subject = `ACREX 2026: Next Steps with Transmonk HVAC Solutions`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -150,7 +150,7 @@ export async function sendConfirmationEmail(data: EmailData) {
           <tr>
             <td align="center" style="background-color:#f8f9fa; padding:20px; border-top:1px solid #eeeeee; font-size:12px; color:#888888;">
               <p style="margin:0;">&copy; 2026 Transmonk India Pvt. Ltd. All Rights Reserved.</p>
-              <p style="margin:5px 0 0 0;">GAT No. 679/2/2, Alandi-Chakan Road, Alandi Phata, Kuruli, Maharashtra-4010501</p>
+              <p style="margin:5px 0 0 0;">GAT No. 679/2/2, Alandi-Chakan Road, Alandi Phata, Kuruli, Maharashtra-410501</p>
             </td>
           </tr>
 

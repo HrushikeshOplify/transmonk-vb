@@ -22,7 +22,7 @@ interface UserInfo {
 }
 
 // ── Input sanitization ────────────────────────────────────────────────────────
-// Fix #7: Sanitize all user inputs before sending to API
+/// Fix #7: Sanitize all user inputs before sending to API
 const sanitizeInput = (value: string): string =>
   value
     .replace(/[<>"'&]/g, "")

@@ -24,7 +24,10 @@ interface UserInfo {
 // ── Input sanitization ────────────────────────────────────────────────────────
 // Fix #7: Sanitize all user inputs before sending to API
 const sanitizeInput = (value: string): string =>
-  value.replace(/[<>"'&]/g, "").trim().slice(0, 500);
+  value
+    .replace(/[<>"'&]/g, "")
+    .trim()
+    .slice(0, 500);
 
 const isValidEmail = (email: string): boolean =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -71,7 +74,9 @@ export default function VoiceBot() {
   const sessionRef = useRef<UltravoxSession | null>(null);
   const sessionInitializedRef = useRef<boolean>(false); // Fix #13: guard double-init
   const startTimeRef = useRef<number | null>(null);
-  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
   const isMountedRef = useRef<boolean>(true); // Fix #16: track mount state
@@ -83,6 +88,9 @@ export default function VoiceBot() {
   // Fix #3: Use ref for formSend so interval closure always reads latest value
   const formSendRef = useRef<boolean>(false);
 
+  //form time out
+  const formTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const canStartCall = useRateLimiter(2000); // Fix #8
 
   // ── Canvas wave animation ──────────────────────────────────────────────────
@@ -92,11 +100,46 @@ export default function VoiceBot() {
   // Fix #10: Keep waves in a ref so they persist across re-renders without
   // rebuilding the entire canvas setup when isAISpeaking changes.
   const wavesRef = useRef([
-    { color: "#c026d3", alpha: 0.7, speed: 0.018, amplitude: 0.38, freq: 2.2, phase: 0 },
-    { color: "#e879f9", alpha: 0.5, speed: 0.022, amplitude: 0.28, freq: 3.1, phase: 1.2 },
-    { color: "#67e8f9", alpha: 0.6, speed: 0.015, amplitude: 0.35, freq: 2.6, phase: 2.5 },
-    { color: "#22d3ee", alpha: 0.45, speed: 0.02, amplitude: 0.22, freq: 4.0, phase: 0.8 },
-    { color: "#a5f3fc", alpha: 0.35, speed: 0.012, amplitude: 0.18, freq: 1.8, phase: 3.1 },
+    {
+      color: "#c026d3",
+      alpha: 0.7,
+      speed: 0.018,
+      amplitude: 0.38,
+      freq: 2.2,
+      phase: 0,
+    },
+    {
+      color: "#e879f9",
+      alpha: 0.5,
+      speed: 0.022,
+      amplitude: 0.28,
+      freq: 3.1,
+      phase: 1.2,
+    },
+    {
+      color: "#67e8f9",
+      alpha: 0.6,
+      speed: 0.015,
+      amplitude: 0.35,
+      freq: 2.6,
+      phase: 2.5,
+    },
+    {
+      color: "#22d3ee",
+      alpha: 0.45,
+      speed: 0.02,
+      amplitude: 0.22,
+      freq: 4.0,
+      phase: 0.8,
+    },
+    {
+      color: "#a5f3fc",
+      alpha: 0.35,
+      speed: 0.012,
+      amplitude: 0.18,
+      freq: 1.8,
+      phase: 3.1,
+    },
   ]);
   const isAISpeakingRef = useRef(false);
 
@@ -134,7 +177,9 @@ export default function VoiceBot() {
         if (speaking) wave.phase += wave.speed;
         ctx.beginPath();
         const amplitude = speaking
-          ? centerY * wave.amplitude * (0.8 + 0.2 * Math.sin(wave.phase * 0.7 + i))
+          ? centerY *
+            wave.amplitude *
+            (0.8 + 0.2 * Math.sin(wave.phase * 0.7 + i))
           : 0;
 
         for (let x = 0; x <= w; x += 2) {
@@ -233,7 +278,9 @@ export default function VoiceBot() {
       const current = sessionRef.current?.transcripts || [];
       setTranscripts([...current]);
       // Fix #12: Removed setStats call — ragQueries was dead state never updated
-      const lastAgent = [...current].reverse().find((t) => t.speaker === "agent");
+      const lastAgent = [...current]
+        .reverse()
+        .find((t) => t.speaker === "agent");
       if (lastAgent) setStatusMessage(lastAgent.text);
     };
 
@@ -244,10 +291,14 @@ export default function VoiceBot() {
       isMountedRef.current = false; // Fix #16
       if (sessionRef.current) {
         sessionRef.current.removeEventListener("status", handleStatusChange);
-        sessionRef.current.removeEventListener("transcripts", handleTranscripts);
+        sessionRef.current.removeEventListener(
+          "transcripts",
+          handleTranscripts,
+        );
         sessionRef.current.leaveCall();
       }
-      if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+      if (durationIntervalRef.current)
+        clearInterval(durationIntervalRef.current);
     };
   }, []);
 
@@ -275,7 +326,12 @@ export default function VoiceBot() {
       //   sessionRef.current.sendText("session count reaches 100");
       // }
 
-       if (elapsed >= 60 && !formSendRef.current && !limit100SentRef.current && sessionRef.current) {
+      if (
+        elapsed >= 60 &&
+        !formSendRef.current &&
+        !limit100SentRef.current &&
+        sessionRef.current
+      ) {
         limit100SentRef.current = true;
         sessionRef.current.sendText("session count reaches 60");
       }
@@ -295,13 +351,27 @@ export default function VoiceBot() {
     }
   };
 
+  // const cleanup = () => {
+  //   stopDurationTimer();
+  //   setCallDuration(0);
+  //   setTranscripts([]);
+  //   limit100SentRef.current = false; // Fix #2
+  //   limit300SentRef.current = false; // Fix #2
+  // };
+
   const cleanup = () => {
-    stopDurationTimer();
-    setCallDuration(0);
-    setTranscripts([]);
-    limit100SentRef.current = false; // Fix #2
-    limit300SentRef.current = false; // Fix #2
-  };
+  stopDurationTimer();
+  setCallDuration(0);
+  setTranscripts([]);
+
+  if (formTimeoutRef.current) {
+    clearTimeout(formTimeoutRef.current);
+    formTimeoutRef.current = null;
+  }
+
+  limit100SentRef.current = false;
+  limit300SentRef.current = false;
+};
 
   // ── Call controls ──────────────────────────────────────────────────────────
 
@@ -312,9 +382,13 @@ export default function VoiceBot() {
     } else {
       if (!canStartCall()) return; // Fix #8: rate limit
       // setShowFormModal(true);
-      setTimeout(() => {
+      // setTimeout(() => {
+      //   setShowFormModal(true);
+      // }, 60*1000);
+
+      formTimeoutRef.current = setTimeout(() => {
         setShowFormModal(true);
-      }, 60*1000);
+      }, 60 * 1000);
       await startCall(); // Fix #14: now properly awaited
     }
   };
@@ -347,10 +421,17 @@ export default function VoiceBot() {
     }
   };
 
-  const endCall = async () => {
-    if (sessionRef.current) await sessionRef.current.leaveCall();
-    cleanup();
-  };
+ const endCall = async () => {
+  if (sessionRef.current) await sessionRef.current.leaveCall();
+
+  // clear form popup timer
+  if (formTimeoutRef.current) {
+    clearTimeout(formTimeoutRef.current);
+    formTimeoutRef.current = null;
+  }
+
+  cleanup();
+};
 
   // Fix #1: Actually apply mute/unmute to the UltravoxSession
   const toggleMute = () => {
@@ -451,7 +532,10 @@ export default function VoiceBot() {
   };
 
   // Fix #11: Memoize derived transcript values — no repeated .reverse() on every render
-  const reversedTranscripts = useMemo(() => [...transcripts].reverse(), [transcripts]);
+  const reversedTranscripts = useMemo(
+    () => [...transcripts].reverse(),
+    [transcripts],
+  );
   const latestAgentMessage = useMemo(
     () => reversedTranscripts.find((t) => t.speaker === "agent")?.text || "",
     [reversedTranscripts],
@@ -485,7 +569,8 @@ export default function VoiceBot() {
         <div
           className="absolute top-0 left-1/2 -translate-x-1/2 w-2/3 h-1 pointer-events-none"
           style={{
-            background: "linear-gradient(90deg, transparent, rgba(200,200,255,0.15), transparent)",
+            background:
+              "linear-gradient(90deg, transparent, rgba(200,200,255,0.15), transparent)",
             filter: "blur(8px)",
           }}
         />
@@ -608,21 +693,50 @@ export default function VoiceBot() {
                 {isActive && (
                   <div
                     className="absolute inset-0 rounded-full animate-ping"
-                    style={{ background: "rgba(239,68,68,0.2)", animationDuration: "2s" }}
+                    style={{
+                      background: "rgba(239,68,68,0.2)",
+                      animationDuration: "2s",
+                    }}
                   />
                 )}
                 {callState === "connecting" ? (
-                  <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <svg
+                    className="animate-spin"
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                  >
                     <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
                     <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
                   </svg>
                 ) : isActive ? (
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="30"
+                    height="30"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.42 19.42 0 0 1 4.43 9.68a2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L10.68 13.31z" />
                     <line x1="23" y1="1" x2="1" y2="23" />
                   </svg>
                 ) : (
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="30"
+                    height="30"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13 19.79 19.79 0 0 1 1.61 4.38 2 2 0 0 1 3.6 2.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.16 6.16l.94-.94a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                   </svg>
                 )}
@@ -639,15 +753,28 @@ export default function VoiceBot() {
                 disabled={!isActive}
                 className="w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200"
                 style={{
-                  background: isMuted ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)",
-                  border: isMuted ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.12)",
+                  background: isMuted
+                    ? "rgba(239,68,68,0.2)"
+                    : "rgba(255,255,255,0.08)",
+                  border: isMuted
+                    ? "1px solid rgba(239,68,68,0.4)"
+                    : "1px solid rgba(255,255,255,0.12)",
                   backdropFilter: "blur(10px)",
                   opacity: !isActive ? 0.4 : 1,
                   cursor: !isActive ? "not-allowed" : "pointer",
                 }}
               >
                 {isMuted ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="rgba(239,68,68,0.9)"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <line x1="1" y1="1" x2="23" y2="23" />
                     <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
                     <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
@@ -655,7 +782,16 @@ export default function VoiceBot() {
                     <line x1="8" y1="23" x2="16" y2="23" />
                   </svg>
                 ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="rgba(255,255,255,0.7)"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                     <line x1="12" y1="19" x2="12" y2="23" />
@@ -683,7 +819,8 @@ export default function VoiceBot() {
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
               <span className="text-white/60 text-sm font-medium tracking-wide">
-                Conversation {exchangeCount > 0 && `· ${exchangeCount} exchanges`}
+                Conversation{" "}
+                {exchangeCount > 0 && `· ${exchangeCount} exchanges`}
               </span>
               <button
                 onClick={() => setShowTranscript(false)}
@@ -692,9 +829,14 @@ export default function VoiceBot() {
                 ✕
               </button>
             </div>
-            <div className="overflow-y-auto p-6 space-y-3" style={{ maxHeight: "calc(55vh - 60px)" }}>
+            <div
+              className="overflow-y-auto p-6 space-y-3"
+              style={{ maxHeight: "calc(55vh - 60px)" }}
+            >
               {transcripts.length === 0 ? (
-                <p className="text-white/20 text-sm text-center py-8">No conversation yet...</p>
+                <p className="text-white/20 text-sm text-center py-8">
+                  No conversation yet...
+                </p>
               ) : (
                 transcripts.map((transcript, index) => (
                   <div
@@ -704,7 +846,10 @@ export default function VoiceBot() {
                     {transcript.speaker === "agent" && (
                       <div
                         className="w-6 h-6 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
-                        style={{ background: "linear-gradient(135deg, #c026d3, #22d3ee)" }}
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #c026d3, #22d3ee)",
+                        }}
                       >
                         <span style={{ fontSize: 10 }}>AI</span>
                       </div>
@@ -712,8 +857,14 @@ export default function VoiceBot() {
                     <div
                       className="px-4 py-2.5 rounded-2xl text-sm max-w-xs"
                       style={{
-                        background: transcript.speaker === "user" ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.06)",
-                        border: transcript.speaker === "user" ? "1px solid rgba(99,102,241,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                        background:
+                          transcript.speaker === "user"
+                            ? "rgba(99,102,241,0.25)"
+                            : "rgba(255,255,255,0.06)",
+                        border:
+                          transcript.speaker === "user"
+                            ? "1px solid rgba(99,102,241,0.3)"
+                            : "1px solid rgba(255,255,255,0.06)",
                         color: "rgba(255,255,255,0.8)",
                         lineHeight: 1.5,
                       }}
@@ -732,7 +883,10 @@ export default function VoiceBot() {
       {showFormModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)" }}
+          style={{
+            background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(12px)",
+          }}
         >
           <div
             className="w-full max-w-md rounded-3xl p-8 relative"
@@ -746,8 +900,12 @@ export default function VoiceBot() {
             {submitSuccess ? (
               <div className="text-center py-10">
                 <div className="text-6xl mb-5">✅</div>
-                <h3 className="text-2xl font-semibold text-white mb-2">Submitted!</h3>
-                <p className="text-white/40 text-sm">Thanks! The Transmonk team will be in touch.</p>
+                <h3 className="text-2xl font-semibold text-white mb-2">
+                  Submitted!
+                </h3>
+                <p className="text-white/40 text-sm">
+                  Thanks! The Transmonk team will be in touch.
+                </p>
               </div>
             ) : (
               <>
@@ -755,12 +913,17 @@ export default function VoiceBot() {
                   {isActive && (
                     <div className="flex items-center gap-2 mb-3">
                       <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
-                      <span className="text-green-400 text-xs font-medium tracking-wide">Call in progress</span>
+                      <span className="text-green-400 text-xs font-medium tracking-wide">
+                        Call in progress
+                      </span>
                     </div>
                   )}
-                  <h2 className="text-xl font-semibold text-white mb-1">Enter Your Details</h2>
+                  <h2 className="text-xl font-semibold text-white mb-1">
+                    Enter Your Details
+                  </h2>
                   <p className="text-white/40 text-sm">
-                    Fill in your info and the Transmonk team will follow up with you.
+                    Fill in your info and the Transmonk team will follow up with
+                    you.
                   </p>
                 </div>
 
@@ -773,11 +936,36 @@ export default function VoiceBot() {
                 <div className="space-y-4">
                   {(
                     [
-                      { label: "Full Name *", field: "name", type: "text", placeholder: "John Doe" },
-                      { label: "Email Address *", field: "email", type: "email", placeholder: "john@example.com" },
-                      { label: "Phone Number", field: "phone", type: "tel", placeholder: "+1 (555) 123-4567" },
-                      { label: "Organization", field: "organization", type: "text", placeholder: "Company Name" },
-                    ] as { label: string; field: keyof UserInfo; type: string; placeholder: string }[]
+                      {
+                        label: "Full Name *",
+                        field: "name",
+                        type: "text",
+                        placeholder: "John Doe",
+                      },
+                      {
+                        label: "Email Address *",
+                        field: "email",
+                        type: "email",
+                        placeholder: "john@example.com",
+                      },
+                      {
+                        label: "Phone Number",
+                        field: "phone",
+                        type: "tel",
+                        placeholder: "+1 (555) 123-4567",
+                      },
+                      {
+                        label: "Organization",
+                        field: "organization",
+                        type: "text",
+                        placeholder: "Company Name",
+                      },
+                    ] as {
+                      label: string;
+                      field: keyof UserInfo;
+                      type: string;
+                      placeholder: string;
+                    }[]
                   ).map(({ label, field, type, placeholder }) => (
                     <div key={field}>
                       <label
@@ -789,12 +977,16 @@ export default function VoiceBot() {
                       <input
                         type={type}
                         value={userInfo[field]}
-                        onChange={(e) => handleInputChange(field, e.target.value)}
+                        onChange={(e) =>
+                          handleInputChange(field, e.target.value)
+                        }
                         placeholder={placeholder}
                         maxLength={200} // Fix #7: enforce max length at DOM level
                         className="w-full px-4 py-3 rounded-xl text-sm transition-all outline-none"
                         style={{
-                          background: fieldErrors[field] ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.05)",
+                          background: fieldErrors[field]
+                            ? "rgba(239,68,68,0.08)"
+                            : "rgba(255,255,255,0.05)",
                           border: fieldErrors[field]
                             ? "1px solid rgba(239,68,68,0.5)"
                             : "1px solid rgba(255,255,255,0.1)",
@@ -803,20 +995,25 @@ export default function VoiceBot() {
                         }}
                         onFocus={(e) => {
                           if (!fieldErrors[field]) {
-                            e.target.style.border = "1px solid rgba(99,102,241,0.6)";
+                            e.target.style.border =
+                              "1px solid rgba(99,102,241,0.6)";
                             e.target.style.background = "rgba(99,102,241,0.08)";
                           }
                         }}
                         onBlur={(e) => {
                           if (!fieldErrors[field]) {
-                            e.target.style.border = "1px solid rgba(255,255,255,0.1)";
-                            e.target.style.background = "rgba(255,255,255,0.05)";
+                            e.target.style.border =
+                              "1px solid rgba(255,255,255,0.1)";
+                            e.target.style.background =
+                              "rgba(255,255,255,0.05)";
                           }
                         }}
                       />
                       {/* Fix #7: Per-field validation error messages */}
                       {fieldErrors[field] && (
-                        <p className="text-red-400 text-xs mt-1">{fieldErrors[field]}</p>
+                        <p className="text-red-400 text-xs mt-1">
+                          {fieldErrors[field]}
+                        </p>
                       )}
                     </div>
                   ))}
@@ -843,8 +1040,14 @@ export default function VoiceBot() {
                     style={{
                       background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
                       boxShadow: "0 4px 20px rgba(99,102,241,0.4)",
-                      opacity: isSubmitting || !userInfo.name || !userInfo.email ? 0.5 : 1,
-                      cursor: isSubmitting || !userInfo.name || !userInfo.email ? "not-allowed" : "pointer",
+                      opacity:
+                        isSubmitting || !userInfo.name || !userInfo.email
+                          ? 0.5
+                          : 1,
+                      cursor:
+                        isSubmitting || !userInfo.name || !userInfo.email
+                          ? "not-allowed"
+                          : "pointer",
                     }}
                   >
                     {isSubmitting ? "Submitting..." : "Submit"}
@@ -858,12 +1061,25 @@ export default function VoiceBot() {
 
       <style jsx global>{`
         @keyframes slideUp {
-          from { opacity: 0; transform: translateY(32px) scale(0.97); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
+          from {
+            opacity: 0;
+            transform: translateY(32px) scale(0.97);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
         }
-        * { box-sizing: border-box; }
-        body { margin: 0; background: #000; }
-        input::placeholder { color: rgba(255, 255, 255, 0.2); }
+        * {
+          box-sizing: border-box;
+        }
+        body {
+          margin: 0;
+          background: #000;
+        }
+        input::placeholder {
+          color: rgba(255, 255, 255, 0.2);
+        }
       `}</style>
     </>
   );
